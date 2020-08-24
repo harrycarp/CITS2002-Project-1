@@ -111,6 +111,19 @@ depend:
 .PHONY : depend
 
 #=============================================================================
+# Target rules for targets named PipeSim_Standalone
+
+# Build rule for target.
+PipeSim_Standalone: cmake_check_build_system
+	$(MAKE) -f CMakeFiles/Makefile2 PipeSim_Standalone
+.PHONY : PipeSim_Standalone
+
+# fast build rule for target.
+PipeSim_Standalone/fast:
+	$(MAKE) -f CMakeFiles/PipeSim_Standalone.dir/build.make CMakeFiles/PipeSim_Standalone.dir/build
+.PHONY : PipeSim_Standalone/fast
+
+#=============================================================================
 # Target rules for targets named Project_1
 
 # Build rule for target.
@@ -150,6 +163,36 @@ main.c.s:
 	$(MAKE) -f CMakeFiles/Project_1.dir/build.make CMakeFiles/Project_1.dir/main.c.s
 .PHONY : main.c.s
 
+pipesim.o: pipesim.c.o
+
+.PHONY : pipesim.o
+
+# target to build an object file
+pipesim.c.o:
+	$(MAKE) -f CMakeFiles/PipeSim_Standalone.dir/build.make CMakeFiles/PipeSim_Standalone.dir/pipesim.c.o
+	$(MAKE) -f CMakeFiles/Project_1.dir/build.make CMakeFiles/Project_1.dir/pipesim.c.o
+.PHONY : pipesim.c.o
+
+pipesim.i: pipesim.c.i
+
+.PHONY : pipesim.i
+
+# target to preprocess a source file
+pipesim.c.i:
+	$(MAKE) -f CMakeFiles/PipeSim_Standalone.dir/build.make CMakeFiles/PipeSim_Standalone.dir/pipesim.c.i
+	$(MAKE) -f CMakeFiles/Project_1.dir/build.make CMakeFiles/Project_1.dir/pipesim.c.i
+.PHONY : pipesim.c.i
+
+pipesim.s: pipesim.c.s
+
+.PHONY : pipesim.s
+
+# target to generate assembly for a file
+pipesim.c.s:
+	$(MAKE) -f CMakeFiles/PipeSim_Standalone.dir/build.make CMakeFiles/PipeSim_Standalone.dir/pipesim.c.s
+	$(MAKE) -f CMakeFiles/Project_1.dir/build.make CMakeFiles/Project_1.dir/pipesim.c.s
+.PHONY : pipesim.c.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -157,11 +200,15 @@ help:
 	@echo "... clean"
 	@echo "... depend"
 	@echo "... rebuild_cache"
-	@echo "... Project_1"
 	@echo "... edit_cache"
+	@echo "... PipeSim_Standalone"
+	@echo "... Project_1"
 	@echo "... main.o"
 	@echo "... main.i"
 	@echo "... main.s"
+	@echo "... pipesim.o"
+	@echo "... pipesim.i"
+	@echo "... pipesim.s"
 .PHONY : help
 
 

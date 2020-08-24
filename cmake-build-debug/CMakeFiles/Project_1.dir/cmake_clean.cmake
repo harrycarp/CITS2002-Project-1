@@ -1,5 +1,6 @@
 file(REMOVE_RECURSE
   "CMakeFiles/Project_1.dir/main.c.o"
+  "CMakeFiles/Project_1.dir/pipesim.c.o"
   "Project_1.pdb"
   "Project_1"
 )
