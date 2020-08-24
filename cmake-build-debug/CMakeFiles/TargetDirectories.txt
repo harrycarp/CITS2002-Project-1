@@ -1,0 +1,3 @@
+/mnt/c/Users/harrycarpenter/OneDrive/Documents/UWA/Year 2/Semester 2/CITS2002/Project 1/cmake-build-debug/CMakeFiles/rebuild_cache.dir
+/mnt/c/Users/harrycarpenter/OneDrive/Documents/UWA/Year 2/Semester 2/CITS2002/Project 1/cmake-build-debug/CMakeFiles/Project_1.dir
+/mnt/c/Users/harrycarpenter/OneDrive/Documents/UWA/Year 2/Semester 2/CITS2002/Project 1/cmake-build-debug/CMakeFiles/edit_cache.dir
