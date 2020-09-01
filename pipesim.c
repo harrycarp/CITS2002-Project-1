@@ -31,129 +31,175 @@
 
 int timetaken = 0;
 
+int time_quantum_usecs = 0;
 
+int pipesize_bytes;
 
+int ready = 0;
 //  ---------------------------------------------------------------------
 
+void ready_to_running();
+
+void to_ready();
+
 //  FUNCTIONS TO VALIDATE FIELDS IN EACH eventfile - NO NEED TO MODIFY
-int check_PID(char word[], int lc)
-{
+int check_PID(char word[], int lc) {
     int PID = atoi(word);
 
-    if(PID <= 0 || PID > MAX_PROCESSES) {
+    if (PID <= 0 || PID > MAX_PROCESSES) {
         printf("invalid PID '%s', line %i\n", word, lc);
         exit(EXIT_FAILURE);
     }
     return PID;
 }
 
-int check_microseconds(char word[], int lc)
-{
+int check_microseconds(char word[], int lc) {
     int usecs = atoi(word);
 
-    if(usecs <= 0) {
+    if (usecs <= 0) {
         printf("invalid microseconds '%s', line %i\n", word, lc);
         exit(EXIT_FAILURE);
     }
     return usecs;
 }
 
-int check_descriptor(char word[], int lc)
-{
+int check_descriptor(char word[], int lc) {
     int pd = atoi(word);
 
-    if(pd < 0 || pd >= MAX_PIPE_DESCRIPTORS_PER_PROCESS) {
+    if (pd < 0 || pd >= MAX_PIPE_DESCRIPTORS_PER_PROCESS) {
         printf("invalid pipe descriptor '%s', line %i\n", word, lc);
         exit(EXIT_FAILURE);
     }
     return pd;
 }
 
-int check_bytes(char word[], int lc)
-{
+int check_bytes(char word[], int lc) {
     int nbytes = atoi(word);
 
-    if(nbytes <= 0) {
+    if (nbytes <= 0) {
         printf("invalid number of bytes '%s', line %i\n", word, lc);
         exit(EXIT_FAILURE);
     }
     return nbytes;
 }
 
+// ------------------------------------------------------------------------
+
+/**
+ * Sleep the process
+ * @param usecs the amount of seconds to sleep for
+ * @param program the program to sleep
+ */
+void sleep_process(int usecs, char program[]){
+    if(timetaken > 0 && ready == 0){
+        to_ready("SLEEPING", program);
+    }
+    printf("@%i %s sleep() for %i usecs\n", timetaken, program, usecs);
+    timetaken += usecs;
+    printf("@%i %s finishes sleeping\n", timetaken, program);
+    ready_to_running();
+}
+
+/**
+ * Sets the programs state to ready
+ * @param program
+ */
+void to_ready(char state[], char program[]) {
+    timetaken += 5;
+    printf("@%i %s.%s->READY\n", timetaken, program, state);
+    ready = 1;
+}
+
+/**
+ * Sets the programs state to running
+ * @param program
+ */
+void ready_to_running(char program[]) {
+    timetaken += 5;
+    printf("@%i READY->RUNNING\n", timetaken);
+}
+
+void compute_process(int usecs, char program[]){
+    if(timetaken > 0 && ready == 0){
+        to_ready("RUNNING", program);
+    }
+    printf("@%i %s compute() for %i usecs\n", timetaken, program, usecs);
+    timetaken += usecs;
+    ready_to_running(program);
+}
+
+
+void exit_process(){
+
+}
+
 //  parse_eventfile() READS AND VALIDATES THE FILE'S CONTENTS
 //  YOU NEED TO STORE ITS VALUES INTO YOUR OWN DATA-STRUCTURES AND VARIABLES
-void parse_eventfile(char program[], char eventfile[])
-{
+void parse_eventfile(char program[], char eventfile[]) {
 #define LINELEN                 100
 #define WORDLEN                 20
 #define CHAR_COMMENT            '#'
 
-//  ATTEMPT TO OPEN OUR EVENTFILE, REPORTING AN ERROR IF WE CAN'T
-    FILE *fp    = fopen(eventfile, "r");
+    //  ATTEMPT TO OPEN OUR EVENTFILE, REPORTING AN ERROR IF WE CAN'T
+    FILE *fp = fopen(eventfile, "r");
 
-    if(fp == NULL) {
+    if (fp == NULL) {
         printf("%s: unable to open '%s'\n", program, eventfile);
         exit(EXIT_FAILURE);
     }
 
-    char    line[LINELEN], words[4][WORDLEN];
-    int     lc = 0;
+    char line[LINELEN], words[4][WORDLEN];
+    int lc = 0;
 
-//  READ EACH LINE FROM THE EVENTFILE, UNTIL WE REACH THE END-OF-FILE
-    while(fgets(line, sizeof line, fp) != NULL) {
+    //  READ EACH LINE FROM THE EVENTFILE, UNTIL WE REACH THE END-OF-FILE
+    while (fgets(line, sizeof line, fp) != NULL) {
         ++lc;
 
-//  COMMENT LINES ARE SIMPLY SKIPPED
-        if(line[0] == CHAR_COMMENT) {
+        //  COMMENT LINES ARE SIMPLY SKIPPED
+        if (line[0] == CHAR_COMMENT) {
             continue;
         }
 
-//  ATTEMPT TO BREAK EACH LINE INTO A NUMBER OF WORDS, USING sscanf()
+        //  ATTEMPT TO BREAK EACH LINE INTO A NUMBER OF WORDS, USING sscanf()
         int nwords = sscanf(line, "%19s %19s %19s %19s",
-                                    words[0], words[1], words[2], words[3]);
+                            words[0], words[1], words[2], words[3]);
 
-//  WE WILL SIMPLY IGNORE ANY LINE WITHOUT ANY WORDS
-        if(nwords <= 0) {
+        //  WE WILL SIMPLY IGNORE ANY LINE WITHOUT ANY WORDS
+        if (nwords <= 0) {
             continue;
         }
 
-//  ENSURE THAT THIS LINE'S PID IS VALID
+        //  ENSURE THAT THIS LINE'S PID IS VALID
         int thisPID = check_PID(words[0], lc);
 
-//  OTHER VALUES ON (SOME) LINES
+        //  OTHER VALUES ON (SOME) LINES
         int otherPID, nbytes, usecs, pipedesc;
 
-//  IDENTIFY LINES RECORDING SYSTEM-CALLS AND THEIR OTHER VALUES
-//  THIS FUNCTION ONLY CHECKS INPUT;  YOU WILL NEED TO STORE THE VALUES
-        if(nwords == 3 && strcmp(words[1], "compute") == 0) {
-            usecs   = check_microseconds(words[2], lc);
-        }
-        else if(nwords == 3 && strcmp(words[1], "sleep") == 0) {
-            usecs   = check_microseconds(words[2], lc);
-        }
-        else if(nwords == 2 && strcmp(words[1], "exit") == 0) {
-            ;
-        }
-        else if(nwords == 3 && strcmp(words[1], "fork") == 0) {
+        //  IDENTIFY LINES RECORDING SYSTEM-CALLS AND THEIR OTHER VALUES
+        //  THIS FUNCTION ONLY CHECKS INPUT;  YOU WILL NEED TO STORE THE VALUES
+        if (nwords == 3 && strcmp(words[1], "compute") == 0) {
+            usecs = check_microseconds(words[2], lc);
+            compute_process(usecs, program);
+        } else if (nwords == 3 && strcmp(words[1], "sleep") == 0) {
+            usecs = check_microseconds(words[2], lc);
+            sleep_process(usecs, program);
+        } else if (nwords == 2 && strcmp(words[1], "exit") == 0) { ;
+        } else if (nwords == 3 && strcmp(words[1], "fork") == 0) {
             otherPID = check_PID(words[2], lc);
-        }
-        else if(nwords == 3 && strcmp(words[1], "wait") == 0) {
+        } else if (nwords == 3 && strcmp(words[1], "wait") == 0) {
             otherPID = check_PID(words[2], lc);
-        }
-        else if(nwords == 3 && strcmp(words[1], "pipe") == 0) {
+        } else if (nwords == 3 && strcmp(words[1], "pipe") == 0) {
             pipedesc = check_descriptor(words[2], lc);
-        }
-        else if(nwords == 4 && strcmp(words[1], "writepipe") == 0) {
+        } else if (nwords == 4 && strcmp(words[1], "writepipe") == 0) {
             pipedesc = check_descriptor(words[2], lc);
-            nbytes   = check_bytes(words[3], lc);
-        }
-        else if(nwords == 4 && strcmp(words[1], "readpipe") == 0) {
+            nbytes = check_bytes(words[3], lc);
+        } else if (nwords == 4 && strcmp(words[1], "readpipe") == 0) {
             pipedesc = check_descriptor(words[2], lc);
-            nbytes   = check_bytes(words[3], lc);
+            nbytes = check_bytes(words[3], lc);
         }
 //  UNRECOGNISED LINE
         else {
-            printf("%s: line %i of '%s' is unrecognized\n", program,lc,eventfile);
+            printf("%s: line %i of '%s' is unrecognized\n", program, lc, eventfile);
             exit(EXIT_FAILURE);
         }
     }
@@ -164,12 +210,21 @@ void parse_eventfile(char program[], char eventfile[])
 #undef  CHAR_COMMENT
 }
 
+
+
 //  ---------------------------------------------------------------------
-
 //  CHECK THE COMMAND-LINE ARGUMENTS, CALL parse_eventfile(), RUN SIMULATION
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
 
-    printf("timetaken %i\n", timetaken);
+    if(argv[3] != NULL) time_quantum_usecs = atoi(argv[3]);
+    if(argv[4] != NULL) pipesize_bytes = atoi(argv[4]);
+
+    printf("Time Quantum: %i nano seconds\n", time_quantum_usecs);
+    printf("Pipe Size: %i bytes\n\n", pipesize_bytes);
+
+    parse_eventfile(argv[1], argv[2]);
+
+
+    printf("\n\ntimetaken %i\n", timetaken);
     return 0;
 }
