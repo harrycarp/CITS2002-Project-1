@@ -31,15 +31,31 @@
 
 //  YOUR DATA STRUCTURES, VARIABLES, AND FUNCTIONS SHOULD BE ADDED HERE:
 
+struct Process {
+    bool is_running;
+    bool is_sleeping;
+    bool is_ready;
+    int id;
+    char name[3]; //using 3 because max process count is 20 (i.e. p20)
+};
+
 int timetaken = 0;
+
+int compute_remaining = 0;
 
 int time_quantum_usecs = 0;
 
 int pipesize_bytes;
 
+struct Process ProcessList[0];
+
+
 //  ---------------------------------------------------------------------
 
 void state_change();
+void is_running(); void is_ready(); void is_sleeping();
+
+int get_next_available_index();
 
 //  FUNCTIONS TO VALIDATE FIELDS IN EACH eventfile - NO NEED TO MODIFY
 int check_PID(char word[], int lc) {
@@ -89,24 +105,67 @@ int check_bytes(char word[], int lc) {
  * @param usecs the amount of seconds to sleep for
  * @param program the program to sleep
  */
-void sleep_process(int usecs, char program[]){
-    printf("@%i sleep() for %iusecs, ", timetaken, usecs);
-    timetaken += usecs;
+void sleep_process(int usecs, struct Process p){
+    if(p.is_ready){
+        state_change("READY", "RUNNING");
+        is_running(p);
+    }
+    printf("sleep() for %iusecs, ", usecs);
+
     state_change("RUNNING", "SLEEPING");
+    is_sleeping(p);
+    timetaken += usecs;
+
+    printf("finished sleeping, ");
+
     state_change("SLEEPING", "READY");
+    is_ready(p);
+
     state_change("READY", "RUNNING");
+    is_running(p);
 }
 
 /**
- * Sets the programs state to running
+ * Compute for usecs.
+ * TODO: implement per process (parents & child from fork) compute
+ * @param usecs
  * @param program
  */
+void compute_process(int usecs, struct Process p){
+    if(p.is_ready){
+        state_change("READY", "RUNNING");
+        is_running(p);
+    }
+    if(usecs <= time_quantum_usecs){
+        printf("@%i p%i:compute() for %iusec (now completed) \n", timetaken,  p.id, usecs);
+        timetaken += usecs;
+        if(p.is_running){
+            state_change("RUNNING", "READY");
+            is_ready(p);
+        }
+    } else {
+        timetaken += time_quantum_usecs;
+        compute_remaining = usecs - time_quantum_usecs;
+        printf("@%i p%i:compute() for %iusec (%i remaining) \n", timetaken, p.id, time_quantum_usecs, compute_remaining);
+        if(p.is_running){
+            state_change("RUNNING", "READY");
+            is_ready(p);
+        }
+        compute_process(compute_remaining, p);
+    }
+}
 
-void compute_process(int usecs, char program[]){
-    printf("@%i compute() for %iusecs (now completed) \n", timetaken, usecs);
-    timetaken += usecs;
-    state_change("RUNNING", "READY");
-    state_change("READY", "RUNNING");
+void fork_process(struct Process parent, int new_id){
+    printf("FORKING p%i -> ", parent.id);
+    struct Process child = {
+            parent.is_running,
+            parent.is_sleeping,
+            parent.is_ready,
+            new_id
+    };
+    printf("NEW FORK p%i \n", child.id);
+    is_ready(child); is_ready(parent);
+    ProcessList[sizeof(ProcessList) + 1] = child;
 }
 
 void exit_process(){
@@ -120,6 +179,27 @@ void state_change(char s1[], char s2[]){
     timetaken += 5;
 }
 
+// can we minimise these down? Probably..
+void is_running(struct Process p){
+    printf("setting p.%i to running \n", p.id);
+    p.is_running = true;
+    p.is_ready = false;
+    p.is_sleeping = false;
+}
+
+void is_sleeping(struct Process p){
+    printf("setting p.%i to sleeping \n", p.id);
+    p.is_running = false;
+    p.is_ready = false;
+    p.is_sleeping = true;
+}
+
+void is_ready(struct Process p){
+    printf("setting p.%i to ready \n", p.id);
+    p.is_running = false;
+    p.is_ready = true;
+    p.is_sleeping = false;
+}
 
 //  parse_eventfile() READS AND VALIDATES THE FILE'S CONTENTS
 //  YOU NEED TO STORE ITS VALUES INTO YOUR OWN DATA-STRUCTURES AND VARIABLES
@@ -163,22 +243,37 @@ void parse_eventfile(char program[], char eventfile[]) {
         //  OTHER VALUES ON (SOME) LINES
         int otherPID, nbytes, usecs, pipedesc;
 
+        // setup the process
+        struct Process p = ProcessList[atoi(words[0])-1];
+
+        //if the process hasn't been forked out, abort.
+//        if( sizeof ProcessList < atoi(words[0])-1) return;
+
+
         //  IDENTIFY LINES RECORDING SYSTEM-CALLS AND THEIR OTHER VALUES
         //  THIS FUNCTION ONLY CHECKS INPUT;  YOU WILL NEED TO STORE THE VALUES
         if (nwords == 3 && strcmp(words[1], "compute") == 0) {
             usecs = check_microseconds(words[2], lc);
-            compute_process(usecs, program);
+            compute_process(usecs, p);
+
         } else if (nwords == 3 && strcmp(words[1], "sleep") == 0) {
             usecs = check_microseconds(words[2], lc);
-            sleep_process(usecs, program);
-        } else if (nwords == 2 && strcmp(words[1], "exit") == 0) { exit_process();
-        } else if (nwords == 3 && strcmp(words[1], "fork") == 0) {
+            sleep_process(usecs, p);
+        }
+        else if (nwords == 2 && strcmp(words[1], "exit") == 0) {
+            exit_process();
+        }
+        else if (nwords == 3 && strcmp(words[1], "fork") == 0) {
             otherPID = check_PID(words[2], lc);
-        } else if (nwords == 3 && strcmp(words[1], "wait") == 0) {
+            fork_process(p, otherPID);
+        }
+        else if (nwords == 3 && strcmp(words[1], "wait") == 0) {
             otherPID = check_PID(words[2], lc);
-        } else if (nwords == 3 && strcmp(words[1], "pipe") == 0) {
+        }
+        else if (nwords == 3 && strcmp(words[1], "pipe") == 0) {
             pipedesc = check_descriptor(words[2], lc);
-        } else if (nwords == 4 && strcmp(words[1], "writepipe") == 0) {
+        }
+        else if (nwords == 4 && strcmp(words[1], "writepipe") == 0) {
             pipedesc = check_descriptor(words[2], lc);
             nbytes = check_bytes(words[3], lc);
         } else if (nwords == 4 && strcmp(words[1], "readpipe") == 0) {
@@ -198,23 +293,29 @@ void parse_eventfile(char program[], char eventfile[]) {
 #undef  CHAR_COMMENT
 }
 
-void BOOT(char program[]){
-    printf("@%i BOOT, %s.RUNNING\n", timetaken, program);
+void BOOT(){
+    struct Process p1 = {
+        false,
+        false,
+        false,
+        1
+    };
+
+    ProcessList[0] = p1;
+    printf("@%i BOOT, %s.RUNNING\n", timetaken, ProcessList[0].name);
 }
 
 //  ---------------------------------------------------------------------
 //  CHECK THE COMMAND-LINE ARGUMENTS, CALL parse_eventfile(), RUN SIMULATION
 int main(int argc, char *argv[]) {
 
-    if(argv[3] != NULL) time_quantum_usecs = atoi(argv[3]);
-    if(argv[4] != NULL) pipesize_bytes = atoi(argv[4]);
+    if(argv[3] != NULL) time_quantum_usecs = atoi(argv[2]);
+    if(argv[4] != NULL) pipesize_bytes = atoi(argv[3]);
 
     printf("Time Quantum: %i nano seconds\n", time_quantum_usecs);
     printf("Pipe Size: %i bytes\n\n", pipesize_bytes);
-
-
-    BOOT(argv[1]);
-    parse_eventfile(argv[1], argv[2]);
+    BOOT();
+    parse_eventfile("p1", argv[1]);
 
 
     printf("\n\ntimetaken %i\n", timetaken);
