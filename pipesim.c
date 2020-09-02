@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <stdbool.h>
+#include <ctype.h>
 
 /* CITS2002 Project 1 2020
    Name:                Harry Devon Carpenter
@@ -35,12 +37,9 @@ int time_quantum_usecs = 0;
 
 int pipesize_bytes;
 
-int ready = 0;
 //  ---------------------------------------------------------------------
 
-void ready_to_running();
-
-void to_ready();
+void state_change();
 
 //  FUNCTIONS TO VALIDATE FIELDS IN EACH eventfile - NO NEED TO MODIFY
 int check_PID(char word[], int lc) {
@@ -91,47 +90,36 @@ int check_bytes(char word[], int lc) {
  * @param program the program to sleep
  */
 void sleep_process(int usecs, char program[]){
-    if(timetaken > 0 && ready == 0){
-        to_ready("SLEEPING", program);
-    }
-    printf("@%i %s sleep() for %i usecs\n", timetaken, program, usecs);
+    printf("@%i sleep() for %iusecs, ", timetaken, usecs);
     timetaken += usecs;
-    printf("@%i %s finishes sleeping\n", timetaken, program);
-    ready_to_running();
-}
-
-/**
- * Sets the programs state to ready
- * @param program
- */
-void to_ready(char state[], char program[]) {
-    timetaken += 5;
-    printf("@%i %s.%s->READY\n", timetaken, program, state);
-    ready = 1;
+    state_change("RUNNING", "SLEEPING");
+    state_change("SLEEPING", "READY");
+    state_change("READY", "RUNNING");
 }
 
 /**
  * Sets the programs state to running
  * @param program
  */
-void ready_to_running(char program[]) {
-    timetaken += 5;
-    printf("@%i READY->RUNNING\n", timetaken);
-}
 
 void compute_process(int usecs, char program[]){
-    if(timetaken > 0 && ready == 0){
-        to_ready("RUNNING", program);
-    }
-    printf("@%i %s compute() for %i usecs\n", timetaken, program, usecs);
+    printf("@%i compute() for %iusecs (now completed) \n", timetaken, usecs);
     timetaken += usecs;
-    ready_to_running(program);
+    state_change("RUNNING", "READY");
+    state_change("READY", "RUNNING");
 }
-
 
 void exit_process(){
-
+    printf("exit(), ");
+    state_change("RUNNING", "EXITED");
 }
+
+
+void state_change(char s1[], char s2[]){
+    printf("%s->%s\n", s1, s2);
+    timetaken += 5;
+}
+
 
 //  parse_eventfile() READS AND VALIDATES THE FILE'S CONTENTS
 //  YOU NEED TO STORE ITS VALUES INTO YOUR OWN DATA-STRUCTURES AND VARIABLES
@@ -183,7 +171,7 @@ void parse_eventfile(char program[], char eventfile[]) {
         } else if (nwords == 3 && strcmp(words[1], "sleep") == 0) {
             usecs = check_microseconds(words[2], lc);
             sleep_process(usecs, program);
-        } else if (nwords == 2 && strcmp(words[1], "exit") == 0) { ;
+        } else if (nwords == 2 && strcmp(words[1], "exit") == 0) { exit_process();
         } else if (nwords == 3 && strcmp(words[1], "fork") == 0) {
             otherPID = check_PID(words[2], lc);
         } else if (nwords == 3 && strcmp(words[1], "wait") == 0) {
@@ -210,7 +198,9 @@ void parse_eventfile(char program[], char eventfile[]) {
 #undef  CHAR_COMMENT
 }
 
-
+void BOOT(char program[]){
+    printf("@%i BOOT, %s.RUNNING\n", timetaken, program);
+}
 
 //  ---------------------------------------------------------------------
 //  CHECK THE COMMAND-LINE ARGUMENTS, CALL parse_eventfile(), RUN SIMULATION
@@ -222,6 +212,8 @@ int main(int argc, char *argv[]) {
     printf("Time Quantum: %i nano seconds\n", time_quantum_usecs);
     printf("Pipe Size: %i bytes\n\n", pipesize_bytes);
 
+
+    BOOT(argv[1]);
     parse_eventfile(argv[1], argv[2]);
 
 
