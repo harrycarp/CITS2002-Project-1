@@ -36,7 +36,7 @@ struct Process {
     bool is_sleeping;
     bool is_ready;
     int id;
-    char name[3]; //using 3 because max process count is 20 (i.e. p20)
+    int time_processed;
 };
 
 int timetaken = 0;
@@ -47,15 +47,22 @@ int time_quantum_usecs = 0;
 
 int pipesize_bytes;
 
-struct Process ProcessList[0];
+struct Process ProcessList[MAX_PROCESSES];
 
 
 //  ---------------------------------------------------------------------
 
 void state_change();
-void is_running(); void is_ready(); void is_sleeping();
-
-int get_next_available_index();
+void is_running();
+void is_ready();
+void is_sleeping();
+int next_available_spot();
+int index_of_process();
+struct Process find_process();
+bool p_is_ready(); bool p_is_running(); bool p_is_sleeping();
+void set_time_processed(); int get_time_processed();
+int get_time_taken();
+// -----------------------------------------------------------------------
 
 //  FUNCTIONS TO VALIDATE FIELDS IN EACH eventfile - NO NEED TO MODIFY
 int check_PID(char word[], int lc) {
@@ -106,22 +113,22 @@ int check_bytes(char word[], int lc) {
  * @param program the program to sleep
  */
 void sleep_process(int usecs, struct Process p){
-    if(p.is_ready){
-        state_change("READY", "RUNNING");
+    if(p_is_ready(p)){
+        state_change(p,"READY", "RUNNING");
         is_running(p);
     }
-    printf("sleep() for %iusecs, ", usecs);
+    printf("@%i   p%i.sleep() for %iusecs, ", timetaken, p.id, usecs);
 
-    state_change("RUNNING", "SLEEPING");
+    state_change(p,"RUNNING", "SLEEPING");
     is_sleeping(p);
     timetaken += usecs;
 
-    printf("finished sleeping, ");
+    printf("@%i   p%i finished sleeping, ", timetaken, p.id);
 
-    state_change("SLEEPING", "READY");
+    state_change(p,"SLEEPING", "READY");
     is_ready(p);
 
-    state_change("READY", "RUNNING");
+    state_change(p,"READY", "RUNNING");
     is_running(p);
 }
 
@@ -132,23 +139,23 @@ void sleep_process(int usecs, struct Process p){
  * @param program
  */
 void compute_process(int usecs, struct Process p){
-    if(p.is_ready){
-        state_change("READY", "RUNNING");
+    if(p_is_ready(p) == true){
+        state_change(p,"READY", "RUNNING");
         is_running(p);
     }
     if(usecs <= time_quantum_usecs){
-        printf("@%i p%i:compute() for %iusec (now completed) \n", timetaken,  p.id, usecs);
-        timetaken += usecs;
-        if(p.is_running){
-            state_change("RUNNING", "READY");
+        printf("@%i   p%i:compute() for %iusec (now completed) \n", timetaken,  p.id, usecs);
+        set_time_processed(p, usecs);
+        if(p_is_running(p)){
+            state_change(p,"RUNNING", "READY");
             is_ready(p);
         }
     } else {
-        timetaken += time_quantum_usecs;
         compute_remaining = usecs - time_quantum_usecs;
-        printf("@%i p%i:compute() for %iusec (%i remaining) \n", timetaken, p.id, time_quantum_usecs, compute_remaining);
-        if(p.is_running){
-            state_change("RUNNING", "READY");
+        printf("@%i   p%i:compute() for %iusec (%i remaining) \n", timetaken, p.id, time_quantum_usecs, compute_remaining);
+        set_time_processed(p, time_quantum_usecs);
+        if(p_is_running(p)){
+            state_change(p,"RUNNING", "READY");
             is_ready(p);
         }
         compute_process(compute_remaining, p);
@@ -156,49 +163,123 @@ void compute_process(int usecs, struct Process p){
 }
 
 void fork_process(struct Process parent, int new_id){
-    printf("FORKING p%i -> ", parent.id);
+    if(p_is_ready(parent) == true){
+        state_change(parent,"READY", "RUNNING");
+        is_running(parent);
+    }
+    printf("@%i   p%i:fork(), ",  timetaken, parent.id);
     struct Process child = {
             parent.is_running,
             parent.is_sleeping,
             parent.is_ready,
-            new_id
+            new_id,
+            0
     };
-    printf("NEW FORK p%i \n", child.id);
+    printf(" new childPID=%i\n", child.id);
+    state_change(child, "NEW", "READY");
+    state_change(parent, "RUNNING", "READY");
     is_ready(child); is_ready(parent);
-    ProcessList[sizeof(ProcessList) + 1] = child;
+    int int_last = next_available_spot();
+    ProcessList[int_last] = child;
 }
 
-void exit_process(){
-    printf("exit(), ");
-    state_change("RUNNING", "EXITED");
+int next_available_spot(){
+    for(int i = 0; i < MAX_PROCESSES; i++){
+        if(ProcessList[i].id == 0){
+            return i;
+        }
+    }
 }
 
+void exit_process(struct Process p){
+    if(p_is_ready(p) == true){
+        state_change(p,"READY", "RUNNING");
+        is_running(p);
+    }
+    printf("@%i   p%i:exit(), ", timetaken, p.id);
+    state_change(p,"RUNNING", "EXITED");
+}
 
-void state_change(char s1[], char s2[]){
-    printf("%s->%s\n", s1, s2);
-    timetaken += 5;
+void state_change(struct Process p, char s1[], char s2[]){
+    printf("@%i   p%i: %s->%s\n",  timetaken, p.id, s1, s2);
+    set_time_processed(p, 5);
 }
 
 // can we minimise these down? Probably..
 void is_running(struct Process p){
-    printf("setting p.%i to running \n", p.id);
+    //printf("setting p.%i to running \n", p.id);
     p.is_running = true;
     p.is_ready = false;
     p.is_sleeping = false;
+
+    ProcessList[index_of_process(p)] = p;
 }
 
 void is_sleeping(struct Process p){
-    printf("setting p.%i to sleeping \n", p.id);
+    //printf("setting p.%i to sleeping \n", p.id);
+
     p.is_running = false;
     p.is_ready = false;
     p.is_sleeping = true;
+
+    ProcessList[index_of_process(p)] = p;
 }
 
 void is_ready(struct Process p){
-    printf("setting p.%i to ready \n", p.id);
+    //printf("setting p.%i to ready \n", p.id);
     p.is_running = false;
     p.is_ready = true;
     p.is_sleeping = false;
+
+    ProcessList[index_of_process(p)] = p;
+}
+
+int get_time_processed(struct Process p){
+    return ProcessList[index_of_process(p)].time_processed;
+}
+
+void set_time_processed(struct Process p, int exec_time){
+    p.time_processed = p.time_processed + exec_time;
+    printf(">> ix: %i\n", index_of_process(p));
+    ProcessList[index_of_process(p)] = p;
+    printf(">> %i\n", ProcessList[index_of_process(p)].time_processed);
+    timetaken = get_time_taken();
+}
+
+bool p_is_ready(struct Process p){
+//    printf("p%i: IS READY is %s \n",
+//           ProcessList[index_of_process(p)].id,
+//           ProcessList[index_of_process(p)].is_ready
+//           ? "TRUE" : "FALSE"
+//           );
+    return ProcessList[index_of_process(p)].is_ready;
+}
+
+bool p_is_running(struct Process p){
+//    printf("p%i: IS RUNNING is %s \n",
+//           ProcessList[index_of_process(p)].id,
+//           ProcessList[index_of_process(p)].is_running
+//           ? "TRUE" : "FALSE"
+//    );
+    return ProcessList[index_of_process(p)].is_running;
+}
+
+bool p_is_sleeping(struct Process p){
+//    printf("p%i: IS SLEEPING is %s \n",
+//           ProcessList[index_of_process(p)].id,
+//           ProcessList[index_of_process(p)].is_sleeping
+//           ? "TRUE" : "FALSE"
+//    );
+    return ProcessList[index_of_process(p)].is_sleeping;
+}
+
+int index_of_process(struct Process p){
+    for (int i = 0; i < MAX_PROCESSES; i++){
+        if(ProcessList[i].id == p.id){
+            //printf("--ix: %i ", i);
+            return i;
+        }
+    }
 }
 
 //  parse_eventfile() READS AND VALIDATES THE FILE'S CONTENTS
@@ -244,11 +325,10 @@ void parse_eventfile(char program[], char eventfile[]) {
         int otherPID, nbytes, usecs, pipedesc;
 
         // setup the process
-        struct Process p = ProcessList[atoi(words[0])-1];
+        struct Process p = find_process(atoi(words[0]));
 
         //if the process hasn't been forked out, abort.
-//        if( sizeof ProcessList < atoi(words[0])-1) return;
-
+        //if( sizeof ProcessList < atoi(words[0])-1) return;
 
         //  IDENTIFY LINES RECORDING SYSTEM-CALLS AND THEIR OTHER VALUES
         //  THIS FUNCTION ONLY CHECKS INPUT;  YOU WILL NEED TO STORE THE VALUES
@@ -261,7 +341,7 @@ void parse_eventfile(char program[], char eventfile[]) {
             sleep_process(usecs, p);
         }
         else if (nwords == 2 && strcmp(words[1], "exit") == 0) {
-            exit_process();
+            exit_process(p);
         }
         else if (nwords == 3 && strcmp(words[1], "fork") == 0) {
             otherPID = check_PID(words[2], lc);
@@ -293,16 +373,24 @@ void parse_eventfile(char program[], char eventfile[]) {
 #undef  CHAR_COMMENT
 }
 
+struct Process find_process(int pid){
+    for(int i = 0; i < MAX_PROCESSES; i++){
+        if(ProcessList[i].id == pid) { return ProcessList[i]; }
+    }
+}
+
 void BOOT(){
     struct Process p1 = {
+        true,
         false,
         false,
-        false,
-        1
+        1,
+        0
     };
-
     ProcessList[0] = p1;
-    printf("@%i BOOT, %s.RUNNING\n", timetaken, ProcessList[0].name);
+
+    printf("@%i BOOT, p%i.RUNNING\n", timetaken, p1.id);
+//    is_running(ProcessList[0]);
 }
 
 //  ---------------------------------------------------------------------
@@ -315,9 +403,19 @@ int main(int argc, char *argv[]) {
     printf("Time Quantum: %i nano seconds\n", time_quantum_usecs);
     printf("Pipe Size: %i bytes\n\n", pipesize_bytes);
     BOOT();
+    printf("\n@--> %i\n", ProcessList[0].id);
     parse_eventfile("p1", argv[1]);
 
+    timetaken = get_time_taken();
 
     printf("\n\ntimetaken %i\n", timetaken);
     return 0;
+}
+
+int get_time_taken(){
+    int sum = 0;
+    for(int i = 0; i < MAX_PROCESSES; i++){
+        sum += ProcessList[i].time_processed;
+    }
+    return sum;
 }

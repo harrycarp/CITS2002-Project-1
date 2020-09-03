@@ -4,8 +4,8 @@ set(CMAKE_DEPENDS_LANGUAGES
   )
 # The set of files for implicit dependencies of each language:
 set(CMAKE_DEPENDS_CHECK_C
-  "/mnt/c/Users/harrycarpenter/OneDrive/Documents/UWA/Year 2/Semester 2/CITS2002/Project 1/main.c" "/mnt/c/Users/harrycarpenter/OneDrive/Documents/UWA/Year 2/Semester 2/CITS2002/Project 1/cmake-build-debug/CMakeFiles/Project_1.dir/main.c.o"
-  "/mnt/c/Users/harrycarpenter/OneDrive/Documents/UWA/Year 2/Semester 2/CITS2002/Project 1/pipesim.c" "/mnt/c/Users/harrycarpenter/OneDrive/Documents/UWA/Year 2/Semester 2/CITS2002/Project 1/cmake-build-debug/CMakeFiles/Project_1.dir/pipesim.c.o"
+  "C:/Users/harry.carpenter/CLionProjects/CITS2002-Project-1/main.c" "C:/Users/harry.carpenter/CLionProjects/CITS2002-Project-1/cmake-build-debug/CMakeFiles/Project_1.dir/main.c.obj"
+  "C:/Users/harry.carpenter/CLionProjects/CITS2002-Project-1/pipesim.c" "C:/Users/harry.carpenter/CLionProjects/CITS2002-Project-1/cmake-build-debug/CMakeFiles/Project_1.dir/pipesim.c.obj"
   )
 set(CMAKE_C_COMPILER_ID "GNU")
 
