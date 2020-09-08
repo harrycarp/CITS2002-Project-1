@@ -1,6 +1,7 @@
-1 compute 600
 1 fork 2
-1 sleep 200
+1 wait 2
 2 compute 100
+1 compute 150
 2 exit
+1 sleep 100
 1 exit
