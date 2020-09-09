@@ -26,7 +26,8 @@
 //  TIME TAKEN TO TRANSFER ONE BYTE TO/FROM A PIPE
 #define USECS_PER_BYTE_TRANSFERED           1
 
-
+// MAX LENGTH OF A WORD IN A LINE
+#define WORDLEN                 20
 //  ---------------------------------------------------------------------
 
 //  YOUR DATA STRUCTURES, VARIABLES, AND FUNCTIONS SHOULD BE ADDED HERE:
@@ -67,7 +68,7 @@ struct Process {
     struct Pipe pipes [MAX_PIPE_DESCRIPTORS_PER_PROCESS];
     int pipe_count;
     int command_count;
-    char command_queue [MAX_SYSCALLS_PER_PROCESS][4];
+    char command_queue [MAX_SYSCALLS_PER_PROCESS][WORDLEN];
 };
 
 int timetaken = 0;
@@ -99,6 +100,10 @@ void check_sleep(bool);
 void wake_process();
 void set_process_inactive();
 int get_pipe_index();
+void
+run_command_line(int nwords, char pString[4][20], int usecs, int pid, struct Process process, int pipedesc, int nbytes,
+                 int lc);
+
 // -----------------------------------------------------------------------
 
 void set_pipe_writeable(struct Process process, struct Pipe pipe, bool b);
@@ -288,12 +293,18 @@ void unwait_on_termination(int terminated_pid){
 
 void run_queued_commands(struct Process process) {
     // now to run the commands... oh boy...
-    for(int i=0; i < process.command_count; i++){
-        for(int j=0; j < 4; j++){
-            printf("%s \n", process.command_queue[i]);
-        }
+    for(int i=0; i <= process.command_count; i++){
+
+//        int count = 0;
+//        for (int j = 0;process.command_queue[i][j] != '\0';j++)
+//        {
+//            printf("!%c\n", process.command_queue[i][j]);
+//        }
+
+        printf("@%i   p%i. running queued command: '%s'\n", timetaken, process.id, process.command_queue[i]);
+
+        //run_command_line(count, process.command_queue[i], 0, 0, process, 0, 0, 0);
     }
-    printf("\n");
 }
 
 void construct_pipe(struct Process write_node, int pipe_id){
@@ -549,7 +560,6 @@ bool p_is_waiting(struct Process p){
 //  YOU NEED TO STORE ITS VALUES INTO YOUR OWN DATA-STRUCTURES AND VARIABLES
 void parse_eventfile(char program[], char eventfile[]) {
 #define LINELEN                 100
-#define WORDLEN                 20
 #define CHAR_COMMENT            '#'
 
     //  ATTEMPT TO OPEN OUR EVENTFILE, REPORTING AN ERROR IF WE CAN'T
@@ -595,11 +605,16 @@ void parse_eventfile(char program[], char eventfile[]) {
             // need to queue up commands to run AFTER this...
             // what's the best way to do this? store as plain text then run the operation again?
 
+            // loop through each word in the command and store in arr.
+            // assuming that a VALID eventfile is passed through, I SHOULD add error checking for this.
             for(int i = 0; i < 4; i++){
                 if(sizeof words[i] > 0){
-                    strcat(p.command_queue[p.command_count], words[i]);
+                    char *to_write = (char*)malloc(256 * sizeof(char));
+                    sprintf(to_write, "%s ", words[i]);
+                    strcat(p.command_queue[p.command_count], to_write);
                 }
             }
+            p.command_count += 1;
             ProcessList[p.ix] = p;
         }
 
@@ -610,46 +625,88 @@ void parse_eventfile(char program[], char eventfile[]) {
         //check if an asleep process is can be woken, if so, wake it
         check_sleep(false);
 
-        //  IDENTIFY LINES RECORDING SYSTEM-CALLS AND THEIR OTHER VALUES
-        //  THIS FUNCTION ONLY CHECKS INPUT;  YOU WILL NEED TO STORE THE VALUES
-        if (nwords == 3 && strcmp(words[1], "compute") == 0) {
-            usecs = check_microseconds(words[2], lc);
-            compute_process(usecs, p);
-        } else if (nwords == 3 && strcmp(words[1], "sleep") == 0) {
-            usecs = check_microseconds(words[2], lc);
-            sleep_process(usecs, p);
-        } else if (nwords == 2 && strcmp(words[1], "exit") == 0) {
-            exit_process(p);
-        } else if (nwords == 3 && strcmp(words[1], "fork") == 0) {
-            otherPID = check_PID(words[2], lc);
-            fork_process(p, otherPID);
-        } else if (nwords == 3 && strcmp(words[1], "wait") == 0) {
-            otherPID = check_PID(words[2], lc);
-            wait_for_process_termination(p, otherPID);
-        } else if (nwords == 3 && strcmp(words[1], "pipe") == 0) {
-            pipedesc = check_descriptor(words[2], lc);
-            construct_pipe(p, pipedesc);
-        } else if (nwords == 4 && strcmp(words[1], "writepipe") == 0) {
-            pipedesc = check_descriptor(words[2], lc);
-            nbytes = check_bytes(words[3], lc);
-            write_pipe(p, pipedesc, nbytes);
-        } else if (nwords == 4 && strcmp(words[1], "readpipe") == 0) {
-            pipedesc = check_descriptor(words[2], lc);
-            nbytes = check_bytes(words[3], lc);
-            read_pipe(p, pipedesc, nbytes);
-        }
-//  UNRECOGNISED LINE
-        else {
-            printf("%s: line %i of '%s' is unrecognized\n", program, lc, eventfile);
-            exit(EXIT_FAILURE);
-        }
+        //MOVED THE IDENTIFIERS TO OWN FUNCTION
+        run_command_line(nwords, words, usecs, otherPID, p, pipedesc, nbytes, lc);
+//        //  IDENTIFY LINES RECORDING SYSTEM-CALLS AND THEIR OTHER VALUES
+//        //  THIS FUNCTION ONLY CHECKS INPUT;  YOU WILL NEED TO STORE THE VALUES
+//        if (nwords == 3 && strcmp(words[1], "compute") == 0) {
+//            usecs = check_microseconds(words[2], lc);
+//            compute_process(usecs, p);
+//        } else if (nwords == 3 && strcmp(words[1], "sleep") == 0) {
+//            usecs = check_microseconds(words[2], lc);
+//            sleep_process(usecs, p);
+//        } else if (nwords == 2 && strcmp(words[1], "exit") == 0) {
+//            exit_process(p);
+//        } else if (nwords == 3 && strcmp(words[1], "fork") == 0) {
+//            otherPID = check_PID(words[2], lc);
+//            fork_process(p, otherPID);
+//        } else if (nwords == 3 && strcmp(words[1], "wait") == 0) {
+//            otherPID = check_PID(words[2], lc);
+//            wait_for_process_termination(p, otherPID);
+//        } else if (nwords == 3 && strcmp(words[1], "pipe") == 0) {
+//            pipedesc = check_descriptor(words[2], lc);
+//            construct_pipe(p, pipedesc);
+//        } else if (nwords == 4 && strcmp(words[1], "writepipe") == 0) {
+//            pipedesc = check_descriptor(words[2], lc);
+//            nbytes = check_bytes(words[3], lc);
+//            write_pipe(p, pipedesc, nbytes);
+//        } else if (nwords == 4 && strcmp(words[1], "readpipe") == 0) {
+//            pipedesc = check_descriptor(words[2], lc);
+//            nbytes = check_bytes(words[3], lc);
+//            read_pipe(p, pipedesc, nbytes);
+//        }
+////  UNRECOGNISED LINE
+//        else {
+//            printf("%s: line %i of '%s' is unrecognized\n", program, lc, eventfile);
+//            exit(EXIT_FAILURE);
+//        }
     }
     fclose(fp);
+
+
+}
+
+void
+run_command_line(int nwords, char words[4][WORDLEN], int usecs, int otherPID, struct Process p, int pipedesc, int nbytes,
+                 int lc) {
+    if (nwords == 3 && strcmp(words[1], "compute") == 0) {
+        usecs = check_microseconds(words[2], lc);
+        compute_process(usecs, p);
+    } else if (nwords == 3 && strcmp(words[1], "sleep") == 0) {
+        usecs = check_microseconds(words[2], lc);
+        sleep_process(usecs, p);
+    } else if (nwords == 2 && strcmp(words[1], "exit") == 0) {
+        exit_process(p);
+    } else if (nwords == 3 && strcmp(words[1], "fork") == 0) {
+        otherPID = check_PID(words[2], lc);
+        fork_process(p, otherPID);
+    } else if (nwords == 3 && strcmp(words[1], "wait") == 0) {
+        otherPID = check_PID(words[2], lc);
+        wait_for_process_termination(p, otherPID);
+    } else if (nwords == 3 && strcmp(words[1], "pipe") == 0) {
+        pipedesc = check_descriptor(words[2], lc);
+        construct_pipe(p, pipedesc);
+    } else if (nwords == 4 && strcmp(words[1], "writepipe") == 0) {
+        pipedesc = check_descriptor(words[2], lc);
+        nbytes = check_bytes(words[3], lc);
+        write_pipe(p, pipedesc, nbytes);
+    } else if (nwords == 4 && strcmp(words[1], "readpipe") == 0) {
+        pipedesc = check_descriptor(words[2], lc);
+        nbytes = check_bytes(words[3], lc);
+        read_pipe(p, pipedesc, nbytes);
+    }
+//  UNRECOGNISED LINE
+    else {
+        printf("%s: line %i is unrecognized\n", p, lc);
+        exit(EXIT_FAILURE);
+    }
+
+}
+
 
 #undef  LINELEN
 #undef  WORDLEN
 #undef  CHAR_COMMENT
-}
 
 struct Process find_process(int pid) {
     for (int i = 0; i < MAX_PROCESSES; i++) {
