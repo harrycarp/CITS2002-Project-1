@@ -1,15 +1,14 @@
+/* CITS2002 Project 1 2020
+   Name:                Harry Devon Carpenter
+   Student number(s):   22723303
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <stdbool.h>
 #include <ctype.h>
-
-/* CITS2002 Project 1 2020
-   Name:                Harry Devon Carpenter
-   Student number(s):   22723303
- */
-
 
 //  MAXIMUM NUMBER OF PROCESSES OUR SYSTEM SUPPORTS (PID=1..20)
 #define MAX_PROCESSES                       20
@@ -103,7 +102,8 @@ int get_pipe_index();
 void
 run_command_line(int nwords, char pString[4][20], int usecs, int pid, struct Process process, int pipedesc, int nbytes,
                  int lc);
-
+void run_queued_commands(struct Process process);
+struct Process find_process_for_pipe(int pipe_id, int proc_id, struct Process process);
 // -----------------------------------------------------------------------
 
 void set_pipe_writeable(struct Process process, struct Pipe pipe, bool b);
@@ -182,10 +182,13 @@ void sleep_process(int usecs, struct Process p) {
     is_sleeping(p);
 }
 
+//check if a process is asleep
 bool is_process_asleep(struct Process p) {
     return p.is_sleeping;
 }
 
+// check what processes are asleep
+// if it's exiting, wake em up
 void check_sleep(bool is_exit) {
     for (int i = 0; i < MAX_PROCESSES; i++) {
         if(!ProcessList[i].is_active || !ProcessList[i].is_sleeping) return;
@@ -233,6 +236,7 @@ void compute_process(int usecs, struct Process p) {
     }
 }
 
+// fork a process and create it's child
 void fork_process(struct Process parent, int new_id) {
     if (p_is_ready(parent) == true) {
         state_change(parent, "READY", "RUNNING");
@@ -267,6 +271,7 @@ void fork_process(struct Process parent, int new_id) {
     ProcessList[int_last] = child;
 }
 
+// set a process to wait for a termination from another process
 void wait_for_process_termination(struct Process to_wait, int wait_for_pid){
     to_wait.is_waiting = true;
     to_wait.is_running = false;
@@ -279,8 +284,8 @@ void wait_for_process_termination(struct Process to_wait, int wait_for_pid){
     ProcessList[to_wait.ix] = to_wait;
 }
 
-void run_queued_commands(struct Process process);
 
+// unwait any processes which are waiting for the termination of the inputted PID
 void unwait_on_termination(int terminated_pid){
     for(int i = 0; i < MAX_PROCESSES; i++){
         if(ProcessList[i].waiting_for == terminated_pid){
@@ -291,22 +296,17 @@ void unwait_on_termination(int terminated_pid){
     }
 }
 
+// runs any command in queue for the process
+// still needs completing
 void run_queued_commands(struct Process process) {
     // now to run the commands... oh boy...
     for(int i=0; i <= process.command_count; i++){
+        printf("@%i   p%i:running queued command: '%s'\n", timetaken, process.id, process.command_queue[i]);
 
-//        int count = 0;
-//        for (int j = 0;process.command_queue[i][j] != '\0';j++)
-//        {
-//            printf("!%c\n", process.command_queue[i][j]);
-//        }
-
-        printf("@%i   p%i. running queued command: '%s'\n", timetaken, process.id, process.command_queue[i]);
-
-        //run_command_line(count, process.command_queue[i], 0, 0, process, 0, 0, 0);
     }
 }
 
+// constructs pipe with the required write note and id
 void construct_pipe(struct Process write_node, int pipe_id){
     if(p_is_ready(write_node)){
         state_change(write_node, "READY", "RUNNING");
@@ -330,8 +330,7 @@ void construct_pipe(struct Process write_node, int pipe_id){
     is_ready(write_node);
 }
 
-struct Process find_process_for_pipe(int pipe_id, int proc_id, struct Process process);
-
+// writes data to thge puip
 void write_pipe(struct Process write_node, int pipe_id, int bytes){
 
     if(p_is_ready(write_node)){
@@ -419,6 +418,7 @@ void read_pipe(struct Process write_node, int pipe_id, int bytes){
 
 }
 
+// find the process which is on the write end of the pipe, given the process ID
 struct Process find_process_for_pipe(int pipe_id, int proc_id, struct Process process) {
     printf(">>> finding Process with pipe %i with readable of p%i\n", pipe_id, proc_id);
     for(int i = 0; i < MAX_PROCESSES; i++){
@@ -431,6 +431,7 @@ struct Process find_process_for_pipe(int pipe_id, int proc_id, struct Process pr
     return process;
 }
 
+// checks if the pipe is readable or not
 bool check_if_readable(struct Process process, int id) {
     for(int i = 0; i < MAX_PROCESSES; i++){
         for(int j = 0; j < MAX_PIPE_DESCRIPTORS_PER_PROCESS; j++){
@@ -444,6 +445,7 @@ bool check_if_readable(struct Process process, int id) {
     return false;
 }
 
+// sets the pipe to a desired readable state
 void set_pipe_readable(struct Process process, struct Pipe pipe, bool b) {
     pipe.is_readable = b;
     int pipe_index = get_pipe_index(process, pipe.id);
@@ -452,6 +454,7 @@ void set_pipe_readable(struct Process process, struct Pipe pipe, bool b) {
     ProcessList[process.ix] = process;
 }
 
+// sets the pipe to a desired writable state
 void set_pipe_writeable(struct Process process, struct Pipe pipe, bool b) {
     pipe.is_writable = b;
     int pipe_index = get_pipe_index(process, pipe.id);
@@ -460,6 +463,7 @@ void set_pipe_writeable(struct Process process, struct Pipe pipe, bool b) {
     ProcessList[process.ix] = process;
 }
 
+// returns the index of the pipe requested in the process
 int get_pipe_index(struct Process p, int pipe_id){
     for(int i = 0; i < MAX_PIPE_DESCRIPTORS_PER_PROCESS; i++){
         if(p.pipes[i].id == pipe_id) {
@@ -470,6 +474,7 @@ int get_pipe_index(struct Process p, int pipe_id){
     return -1;
 }
 
+// find the next spot to store the new process
 int next_available_spot() {
     for (int i = 0; i < MAX_PROCESSES; i++) {
         if (ProcessList[i].id == 0) {
@@ -479,6 +484,7 @@ int next_available_spot() {
     return -1;
 }
 
+// exit the process
 void exit_process(struct Process p) {
     if (p_is_ready(p)) {
         state_change(p, "READY", "RUNNING");
@@ -491,6 +497,8 @@ void exit_process(struct Process p) {
     unwait_on_termination(p.id);
 }
 
+// a simple function to run a state change
+// TODO: Add the below set process state function to a dep on this
 void state_change(struct Process p, char s1[], char s2[]) {
     printf("@%i   p%i: %s->%s\n", timetaken, p.id, s1, s2);
     set_time_processed(p, USECS_TO_CHANGE_PROCESS_STATE);
@@ -498,8 +506,9 @@ void state_change(struct Process p, char s1[], char s2[]) {
 
 //------------------------------------------------------
 // can we minimise these down? Probably..
+
+// set the process to a running state
 void is_running(struct Process p) {
-    //printf("setting p.%i to running \n", p.id);
     p.is_running = true;
     p.is_ready = false;
     p.is_sleeping = false;
@@ -507,9 +516,8 @@ void is_running(struct Process p) {
     ProcessList[p.ix] = p;
 }
 
+// set the process to a sleeping state
 void is_sleeping(struct Process p) {
-    //printf("setting p.%i to sleeping \n", p.id);
-
     p.is_running = false;
     p.is_ready = false;
     p.is_sleeping = true;
@@ -517,8 +525,8 @@ void is_sleeping(struct Process p) {
     ProcessList[p.ix] = p;
 }
 
+// set the process to a ready state
 void is_ready(struct Process p) {
-    //printf("setting p.%i to ready \n", p.id);
     p.is_running = false;
     p.is_ready = true;
     p.is_sleeping = false;
@@ -526,31 +534,34 @@ void is_ready(struct Process p) {
     ProcessList[p.ix] = p;
 }
 
+// deactivate the process
 void set_process_inactive(struct Process p){
     //printf("setting p.%i to ready \n", p.id);
     p.is_active = false;
     ProcessList[p.ix] = p;
 }
 
+// set the amount of time the process has executed for
 void set_time_processed(struct Process p, int exec_time) {
     struct Process p1 = p;
     p1.time_processed += exec_time;
     ProcessList[p.ix] = p1;
     timetaken += exec_time;
 }
-
+// returns if the process is read
 bool p_is_ready(struct Process p) {
     return ProcessList[p.ix].is_ready;
 }
-
+// returns if the process is running
 bool p_is_running(struct Process p) {
     return ProcessList[p.ix].is_running;
 }
-
+// returns if the process is sleeping
 bool p_is_sleeping(struct Process p) {
     return ProcessList[p.ix].is_sleeping;
 }
 
+// returns if the process is waiting
 bool p_is_waiting(struct Process p){
     return ProcessList[p.ix].is_waiting;
 }
@@ -625,47 +636,17 @@ void parse_eventfile(char program[], char eventfile[]) {
         //check if an asleep process is can be woken, if so, wake it
         check_sleep(false);
 
-        //MOVED THE IDENTIFIERS TO OWN FUNCTION
+        // init to 0 otherwise compiler will throw a fit
+        usecs = 0; otherPID = 0; pipedesc=0; nbytes=0;
         run_command_line(nwords, words, usecs, otherPID, p, pipedesc, nbytes, lc);
-//        //  IDENTIFY LINES RECORDING SYSTEM-CALLS AND THEIR OTHER VALUES
-//        //  THIS FUNCTION ONLY CHECKS INPUT;  YOU WILL NEED TO STORE THE VALUES
-//        if (nwords == 3 && strcmp(words[1], "compute") == 0) {
-//            usecs = check_microseconds(words[2], lc);
-//            compute_process(usecs, p);
-//        } else if (nwords == 3 && strcmp(words[1], "sleep") == 0) {
-//            usecs = check_microseconds(words[2], lc);
-//            sleep_process(usecs, p);
-//        } else if (nwords == 2 && strcmp(words[1], "exit") == 0) {
-//            exit_process(p);
-//        } else if (nwords == 3 && strcmp(words[1], "fork") == 0) {
-//            otherPID = check_PID(words[2], lc);
-//            fork_process(p, otherPID);
-//        } else if (nwords == 3 && strcmp(words[1], "wait") == 0) {
-//            otherPID = check_PID(words[2], lc);
-//            wait_for_process_termination(p, otherPID);
-//        } else if (nwords == 3 && strcmp(words[1], "pipe") == 0) {
-//            pipedesc = check_descriptor(words[2], lc);
-//            construct_pipe(p, pipedesc);
-//        } else if (nwords == 4 && strcmp(words[1], "writepipe") == 0) {
-//            pipedesc = check_descriptor(words[2], lc);
-//            nbytes = check_bytes(words[3], lc);
-//            write_pipe(p, pipedesc, nbytes);
-//        } else if (nwords == 4 && strcmp(words[1], "readpipe") == 0) {
-//            pipedesc = check_descriptor(words[2], lc);
-//            nbytes = check_bytes(words[3], lc);
-//            read_pipe(p, pipedesc, nbytes);
-//        }
-////  UNRECOGNISED LINE
-//        else {
-//            printf("%s: line %i of '%s' is unrecognized\n", program, lc, eventfile);
-//            exit(EXIT_FAILURE);
-//        }
     }
     fclose(fp);
 
 
 }
 
+//MIGRATED COMMAND CHECKING TO SEPARATE FUNCTION
+// This is so we can run it again for the queued commands when a process is "in wait"
 void
 run_command_line(int nwords, char words[4][WORDLEN], int usecs, int otherPID, struct Process p, int pipedesc, int nbytes,
                  int lc) {
@@ -697,7 +678,7 @@ run_command_line(int nwords, char words[4][WORDLEN], int usecs, int otherPID, st
     }
 //  UNRECOGNISED LINE
     else {
-        printf("%s: line %i is unrecognized\n", p, lc);
+        printf("p%d: line %i is unrecognized\n", p.id, lc);
         exit(EXIT_FAILURE);
     }
 
@@ -743,19 +724,10 @@ int main(int argc, char *argv[]) {
 
     printf("Time Quantum: %i nano seconds\n", time_quantum_usecs);
     printf("Pipe Size: %i bytes\n\n", pipesize_bytes);
+
     BOOT();
-    printf("\n@--> %i\n", ProcessList[0].id);
     parse_eventfile("p1", argv[1]);
 
     printf("\n\ntimetaken %i\n", timetaken);
     return 0;
 }
-
-//
-//int get_time_taken() {
-//    int sum = 0;
-//    for (int i = 0; i < MAX_PROCESSES; i++) {
-//        sum += ProcessList[i].time_processed;
-//    }
-//    return sum;
-//}
